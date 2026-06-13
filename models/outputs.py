@@ -72,10 +72,65 @@ class ValidationOutput(BaseModel):
 
 
 class WriterOutput(BaseModel):
-    report: str
+    title: str = Field(
+        ...,
+        description="Title of the research report"
+    )
 
+    executive_summary: str = Field(
+        ...,
+        description="Short summary of research findings"
+    )
+
+    report: str = Field(
+        ...,
+        description="Complete research report"
+    )
+
+    references: list[str] = Field(
+        default_factory=list,
+        description="Research source URLs"
+    )
 
 class CriticOutput(BaseModel):
-    critique: str
+    overall_score: float = Field(
+        ...,
+        description="Overall report quality score"
+    )
 
-    final_report: str
+    structure_score: float = Field(
+        ...,
+        description="Report structure quality"
+    )
+
+    clarity_score: float = Field(
+        ...,
+        description="Report clarity"
+    )
+
+    research_quality_score: float = Field(
+        ...,
+        description="Research quality"
+    )
+
+    completeness_score: float = Field(
+        ...,
+        description="Completeness of report"
+    )
+
+    strengths: list[str] = Field(
+        default_factory=list
+    )
+
+    weaknesses: list[str] = Field(
+        default_factory=list
+    )
+
+    improvement_suggestions: list[str] = Field(
+        default_factory=list
+    )
+
+    approved: bool = Field(
+        ...,
+        description="Whether report is acceptable"
+    )

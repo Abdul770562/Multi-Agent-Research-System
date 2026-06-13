@@ -47,7 +47,8 @@ def planner_agent(state: ResearchState) -> ResearchState:
     topic = state["query"]
 
     structured_llm = llm.with_structured_output(
-        PlanningOutput
+        PlanningOutput,
+        method="json_mode"
     )
 
     try:
@@ -65,6 +66,7 @@ Research Topic:
         )
 
         state["planning_output"] = planning_output
+        print("Planner completed")
 
         return state
 

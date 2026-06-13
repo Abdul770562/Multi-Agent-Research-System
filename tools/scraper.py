@@ -46,7 +46,7 @@ def scrape_url(url: str) -> str:
             strip=True
         )
 
-        return text[:15000]
+        return text[:5000]
 
     except Exception:
         return ""

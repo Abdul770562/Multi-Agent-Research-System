@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing_extensions import TypedDict
 
 from models.outputs import (
     PlanningOutput,
@@ -33,3 +33,7 @@ class ResearchState(
     critic_output: (
         CriticOutput | None
     )
+
+    revision_count: int
+    previous_critic_score: float
+    report_versions: list[str]

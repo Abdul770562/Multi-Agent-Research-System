@@ -103,4 +103,6 @@ RESEARCH DATA:
         "validation_output"
     ] = validation_result
 
+    print("Validator completed")
+    print(validation_result)
     return state

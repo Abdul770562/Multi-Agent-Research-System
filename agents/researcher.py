@@ -69,7 +69,10 @@ def researcher_agent(
 
     research_outputs = []
 
-    for query in planning_output.search_queries:
+    MAX_SEARCH_QUERIES = 3
+    MAX_URLS_PER_QUERY = 2
+
+    for query in planning_output.search_queries[:MAX_SEARCH_QUERIES]:
 
         print(
             f"\nResearching: {query}"
@@ -77,7 +80,7 @@ def researcher_agent(
 
         urls = search_web(
             query=query,
-            max_results=3
+            max_results=MAX_URLS_PER_QUERY
         )
 
         if not urls:
@@ -126,5 +129,7 @@ def researcher_agent(
     state[
         "research_outputs"
     ] = research_outputs
+
+    print("Researcher completed")
 
     return state
