@@ -134,3 +134,52 @@ class CriticOutput(BaseModel):
         ...,
         description="Whether report is acceptable"
     )
+
+class ResearchGap(BaseModel):
+    """
+    Represents a single missing research gap identified
+    after evaluating the generated report.
+    """
+
+    topic: str = Field(
+        ...,
+        description="High-level missing topic."
+    )
+
+    expected_section: str = Field(
+        ...,
+        description="Report section where this information should be incorporated."
+    )
+
+    reason: str = Field(
+        ...,
+        description="Why this topic is considered a gap."
+    )
+
+    search_query: str = Field(
+        ...,
+        description="Concrete search query for retrieving missing information."
+    )
+
+    priority: int = Field(
+        ...,
+        ge=1,
+        le=5,
+        description="Priority of this gap. 1 = Highest priority."
+    )
+
+
+class GapAnalysis(BaseModel):
+    """
+    Structured output produced by the Gap Analyzer Agent.
+    """
+
+    gaps: list[ResearchGap] = Field(
+        default_factory=list,
+        description="Prioritized list of missing research gaps."
+    )
+
+    rationale: str = Field(
+        ...,
+        description="Overall explanation of why additional research is required."
+    )

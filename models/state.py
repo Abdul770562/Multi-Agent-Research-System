@@ -5,7 +5,8 @@ from models.outputs import (
     ResearchOutput,
     ValidationOutput,
     WriterOutput,
-    CriticOutput
+    CriticOutput,
+    GapAnalysis
 )
 
 
@@ -22,6 +23,8 @@ class ResearchState(
         list[ResearchOutput]
     )
 
+    additional_research_outputs: list[ResearchOutput]
+
     validation_output: (
         ValidationOutput | None
     )
@@ -34,6 +37,11 @@ class ResearchState(
         CriticOutput | None
     )
 
+
+    gap_analysis: GapAnalysis | None
+
     revision_count: int
     previous_critic_score: float
     report_versions: list[str]
+
+    

@@ -1,72 +1,90 @@
-from graph.workflow import (
-    build_graph
-)
+from graph.workflow import build_graph
+
+
+def print_separator(title: str):
+
+    print("\n")
+    print("=" * 80)
+    print(title.center(80))
+    print("=" * 80)
 
 
 def main():
 
-    
-
     graph = build_graph()
 
     initial_state = {
-        "query":
-        input(
+
+        "query": input(
             "Enter research topic: "
         ),
 
-        "planning_output":
-        None,
+        "planning_output": None,
 
-        "research_outputs":
-        [],
+        "research_outputs": [],
 
-        "validation_output":
-        None,
+        "additional_research_outputs": [],
 
-        "writer_output":
-        None,
+        "gap_analysis": None,
 
-        "critic_output":
-        None,
+        "validation_output": None,
 
-        "revision_count": 
-        0,
-        "previous_critic_score": 
-        0.0,
-        "report_versions": 
-        []
+        "writer_output": None,
+
+        "critic_output": None,
+
+        "revision_count": 0,
+
+        "previous_critic_score": 0.0,
+
+        "report_versions": []
+
     }
 
     result = graph.invoke(
         initial_state
     )
 
-    print("\n")
-
-    print("=" * 80)
-
-    print("\nFINAL STATE:\n")
-    print(result.keys())
-
-    print("\nWRITER OUTPUT:")
-    print(result.get("writer_output"))
-
-    print("\nCRITIC OUTPUT:")
-    print(result.get("critic_output"))
-
-    # print(
-    #     result["writer_output"].report
-    # )
-
-    writer_output = result.get(
-    "writer_output"
+    writer = result.get(
+        "writer_output"
     )
 
-    if writer_output:
+    critic = result.get(
+        "critic_output"
+    )
+
+    planning = result.get(
+        "planning_output"
+    )
+
+    print_separator(
+        "MULTI AGENT RESEARCH SYSTEM"
+    )
+
+    print(
+        f"Topic              : {planning.topic}"
+    )
+
+    print(
+        f"Research Iterations: {result['revision_count']}"
+    )
+
+    print(
+        f"Final Score        : {critic.overall_score:.1f}/10"
+    )
+
+    print(
+        f"Approved           : {critic.approved}"
+    )
+
+    print_separator(
+        "RESEARCH REPORT"
+    )
+
+    if writer:
 
         print(
-            writer_output.report
+            writer.report
         )
 
     else:
@@ -75,14 +93,86 @@ def main():
             "No report generated."
         )
 
-    print("=" * 80)
+    print_separator(
+        "REFERENCES"
+    )
 
-    print("\nCritic Review:\n")
+    if writer and writer.references:
+
+        for index, reference in enumerate(
+            writer.references,
+            start=1
+        ):
+
+            print(
+                f"{index}. {reference}"
+            )
+
+    else:
+
+        print(
+            "No references available."
+        )
+
+    print_separator(
+        "FINAL CRITIC REVIEW"
+    )
 
     print(
-        result["critic_output"]
+        f"Overall Score      : {critic.overall_score:.1f}/10"
     )
+
+    print(
+        f"Structure Score    : {critic.structure_score:.1f}/10"
+    )
+
+    print(
+        f"Clarity Score      : {critic.clarity_score:.1f}/10"
+    )
+
+    print(
+        f"Research Quality   : {critic.research_quality_score:.1f}/10"
+    )
+
+    print(
+        f"Completeness Score : {critic.completeness_score:.1f}/10"
+    )
+
+    print(
+        f"Approved           : {critic.approved}"
+    )
+
+    print("\nStrengths:")
+
+    for strength in critic.strengths:
+
+        print(
+            f"• {strength}"
+        )
+
+    print("\nWeaknesses:")
+
+    for weakness in critic.weaknesses:
+
+        print(
+            f"• {weakness}"
+        )
+
+    print("\nImprovement Suggestions:")
+
+    for suggestion in critic.improvement_suggestions:
+
+        print(
+            f"• {suggestion}"
+        )
+
+    print("\n")
+
+    print("=" * 80)
+    print("Research Completed Successfully".center(80))
+    print("=" * 80)
 
 
 if __name__ == "__main__":
+
     main()

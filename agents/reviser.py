@@ -1,85 +1,110 @@
+import re
+
 from langchain_core.messages import HumanMessage
 
 from config.llm import llm
 
-from models.outputs import WriterOutput
-from models.state import ResearchState
-import re
+from models.outputs import (
+    WriterOutput,
+    ResearchOutput,
+)
+
+from models.outputs import (
+    GapAnalysis,
+)
+
+from models.state import (
+    ResearchState,
+)
+
+from utils.research import (
+    merge_research_outputs,
+)
+
+
 
 REVISION_PROMPT = """
-You are a senior research editor.
+You are a Senior Research Editor.
 
-Your task is to improve an existing report.
+Your responsibility is NOT to rewrite the report.
 
-CRITICAL GROUNDING RULES:
+Your responsibility is to improve ONLY the
+parts of the report that are supported by
+new research evidence.
 
-You may ONLY use information contained in:
+You are given:
 
-1. Current Report
-2. Research Findings
+1. Original report
 
-You MUST NOT:
+2. Complete research corpus
 
-- Invent sources
-- Invent citations
-- Invent studies
-- Invent statistics
-- Invent percentages
-- Invent case studies
-- Invent organizations
-- Invent facts
+3. Research gaps
 
-If information does not exist in the
-research findings, do not add it.
+4. Critic weaknesses
 
-EDITOR RULES:
+5. Critic improvement suggestions
 
-- Preserve report structure.
-- Preserve valid content.
-- Improve clarity.
-- Improve completeness.
-- Improve depth where evidence exists.
-- Address every weakness.
-- Address every improvement suggestion.
-- Expand sections using ONLY provided evidence.
+===============================
 
-Return an improved report.
+GROUNDING RULES
 
-Do not create new references.
-Do not create new evidence.
+You may ONLY use information
+contained in the supplied
+research corpus.
 
-You must not:
+Never invent:
 
-- add references
-- remove references
-- rename references
-- create a new references section
+- facts
+- citations
+- URLs
+- organizations
+- studies
+- statistics
+- percentages
+- case studies
 
-For every weakness:
+If evidence does not exist,
+do not add it.
 
-1. Identify the section that should be improved.
-2. Modify that section.
-3. Explain the improvement internally.
-4. Preserve all other sections.
+===============================
+
+REVISION RULES
+
+Preserve:
+
+- report title
+- structure
+- headings
+- references
+- valid content
+
+Improve ONLY the sections
+identified by the Gap Analyzer.
+
+Address every:
+
+- weakness
+- improvement suggestion
+
+Expand sections ONLY if
+supporting evidence exists.
+
+Do not create a new references section.
+
+Do not remove references.
+
+Return the COMPLETE updated report.
 """
 
-def reviser_agent(
-    state: ResearchState
-) -> ResearchState:
+def build_research_context(
+    research_outputs: list[ResearchOutput],
+) -> str:
+    """
+    Builds a formatted research corpus
+    for the reviser.
+    """
 
-    writer_output = state[
-        "writer_output"
-    ]
-
-    critic_output = state[
-        "critic_output"
-    ]
-
-    research_outputs = state[
-        "research_outputs"
-    ]
-
-    research_context = ""
+    context = ""
 
     for item in research_outputs:
 
@@ -93,71 +118,137 @@ def reviser_agent(
             for source in item.sources
         )
 
-        research_context += f"""
+        context += f"""
 
-SEARCH QUERY:
+==================================================
+
+SEARCH QUERY
+
 {item.search_query}
 
-SUMMARY:
+SUMMARY
+
 {item.summary}
 
-KEY FINDINGS:
+KEY FINDINGS
+
 {findings}
 
-SOURCES:
+SOURCES
+
 {sources}
 
 """
 
-    structured_llm = (
-        llm.with_structured_output(
-            WriterOutput
-        )
+    return context
+
+
+def build_gap_context(
+    gap_analysis: GapAnalysis,
+) -> str:
+    """
+    Formats Gap Analyzer output for
+    the reviser.
+    """
+
+    context = ""
+
+    for gap in gap_analysis.gaps:
+
+        context += f"""
+
+----------------------------------------
+
+TOPIC
+
+{gap.topic}
+
+EXPECTED SECTION
+
+{gap.expected_section}
+
+REASON
+
+{gap.reason}
+
+SEARCH QUERY
+
+{gap.search_query}
+
+PRIORITY
+
+{gap.priority}
+
+"""
+
+    return context
+
+def build_critic_context(
+    state: ResearchState,
+) -> str:
+    """
+    Formats critic feedback.
+    """
+
+    critic = state["critic_output"]
+
+    weaknesses = "\n".join(
+        f"- {item}"
+        for item in critic.weaknesses
     )
 
-    allowed_sources = set()
+    improvements = "\n".join(
+        f"- {item}"
+        for item in critic.improvement_suggestions
+    )
+
+    return f"""
+OVERALL SCORE
+
+{critic.overall_score}
+
+----------------------------------------
+
+WEAKNESSES
+
+{weaknesses}
+
+----------------------------------------
+
+IMPROVEMENT SUGGESTIONS
+
+{improvements}
+"""
+
+def get_allowed_sources(
+    research_outputs: list[ResearchOutput],
+) -> set[str]:
+    """
+    Collect every source URL that
+    the reviser is allowed to use.
+    """
+
+    allowed = set()
 
     for item in research_outputs:
-        allowed_sources.update(
-            item.sources
-        )
+        allowed.update(item.sources)
 
-    revised_output = (
-        structured_llm.invoke(
-            [
-                HumanMessage(
-                    content=f"""
-    {REVISION_PROMPT}
+    return allowed
 
-    CURRENT REPORT:
-
-    {writer_output.report}
-
-    RESEARCH FINDINGS:
-
-    {research_context}
-
-    ALLOWED SOURCES:
-
-    {list(allowed_sources)}
-
-    WEAKNESSES:
-
-    {critic_output.weaknesses}
-
-    IMPROVEMENT SUGGESTIONS:
-
-    {critic_output.improvement_suggestions}
+def validate_grounding(
+    report: str,
+    allowed_sources: set[str],
+) -> tuple[str, set[str]]:
     """
-                )
-            ]
-        )
-    )
+    Removes URLs that were not
+    present in the supplied
+    research corpus.
+    """
 
     urls_found = set(
         re.findall(
             r"https?://[^\s)\]]+",
-            revised_output.report
+            report,
         )
     )
 
@@ -165,26 +256,211 @@ SOURCES:
         urls_found - allowed_sources
     )
 
-    if invalid_urls:
-        print(
-        "WARNING: Reviser introduced "
-        "unauthorized sources:"
+    for url in invalid_urls:
+
+        report = report.replace(
+            url,
+            "[REMOVED_UNAUTHORIZED_SOURCE]",
         )
 
-        print(invalid_urls) 
+    return report, invalid_urls
 
+def reviser_agent(
+    state: ResearchState,
+) -> ResearchState:
+    """
+    Improves the report using
+    additional research collected
+    after Gap Analysis.
+    """
 
+    writer_output = state[
+        "writer_output"
+    ]
+
+    gap_analysis = state[
+        "gap_analysis"
+    ]
+
+    # ----------------------------------
+    # Merge Original + Additional Research
+    # ----------------------------------
+
+    merged_research = (
+        merge_research_outputs(
+            state["research_outputs"],
+            state[
+                "additional_research_outputs"
+            ],
+        )
+    )
+
+    # ----------------------------------
+    # Build LLM Context
+    # ----------------------------------
+
+    research_context = (
+        build_research_context(
+            merged_research
+        )
+    )
+
+    gap_context = (
+        build_gap_context(
+            gap_analysis
+        )
+    )
+
+    critic_context = (
+        build_critic_context(
+            state
+        )
+    )
+
+    # ----------------------------------
+    # Allowed Sources
+    # ----------------------------------
+
+    allowed_sources = (
+        get_allowed_sources(
+            merged_research
+        )
+    )
+
+    print(
+        "\nStarting Revision..."
+    )
+
+    print(
+        f"Research Blocks : "
+        f"{len(merged_research)}"
+    )
+
+    print(
+        f"Gaps            : "
+        f"{len(gap_analysis.gaps)}"
+    )
+
+    print(
+        f"Allowed Sources : "
+        f"{len(allowed_sources)}"
+    )
+
+    structured_llm = (
+        llm.with_structured_output(
+            WriterOutput
+        )
+    )
+
+    # ----------------------------------
+    # Generate Revised Report
+    # ----------------------------------
+
+    try:
+
+        revised_output = (
+            structured_llm.invoke(
+                [
+                    HumanMessage(
+                        content=f"""
+{REVISION_PROMPT}
+
+==================================================
+
+CURRENT REPORT
+
+{writer_output.report}
+
+==================================================
+
+COMPLETE RESEARCH CORPUS
+
+{research_context}
+
+==================================================
+
+RESEARCH GAPS
+
+{gap_context}
+
+==================================================
+
+CRITIC FEEDBACK
+
+{critic_context}
+
+==================================================
+
+Revise ONLY the sections
+identified in the Gap Analysis.
+
+Keep all valid information.
+
+Use ONLY evidence present
+inside the research corpus.
+
+Return the complete
+improved report.
+"""
+                    )
+                ]
+            )
+        )
+
+    except Exception as e:
+
+        raise RuntimeError(
+            f"Revision failed: {e}"
+        )
+    
     revised_output.references = (
         writer_output.references
     )
 
-    for url in invalid_urls:
-        revised_output.report = (
-            revised_output.report.replace(
-                url,
-                "[REMOVED_UNAUTHORIZED_SOURCE]"
-            )
+    (
+        revised_output.report,
+        invalid_urls,
+    ) = validate_grounding(
+        revised_output.report,
+        allowed_sources,
+    )
+
+    if invalid_urls:
+
+        print(
+            "\nWARNING:"
         )
+
+        print(
+            "Reviser introduced "
+            "unauthorized URLs."
+        )
+
+        for url in invalid_urls:
+
+            print(
+                f" - {url}"
+            )
+
+        print()
+
+    old_words = len(writer_output.report.split())
+    new_words = len(revised_output.report.split())
+
+    print(
+        f"Word Count: "
+        f"{old_words} -> {new_words}"
+    )
+
+    print(
+        f"Removed "
+        f"{len(invalid_urls)} "
+        f"unauthorized URLs."
+    )
+
+    # ----------------------------------
+    # Update State
+    # ----------------------------------
 
     state[
         "writer_output"
@@ -200,12 +476,59 @@ SOURCES:
         revised_output.report
     )
 
-    
-    
+    previous_score = state.get(
+        "previous_critic_score",
+        0.0,
+    )
+
+    previous_words = len(
+        writer_output.report.split()
+    )
+
+    revised_words = len(
+        revised_output.report.split()
+    )
+
+    print()
+
+    print("=" * 60)
+    print("Revision Summary")
+    print("=" * 60)
 
     print(
-    f"Revision count: "
-    f"{state['revision_count']}"
+        f"Revision Number : "
+        f"{state['revision_count']}"
+    )
+
+    print(
+        f"Previous Critic Score : "
+        f"{previous_score}"
+    )
+
+    print(
+        f"Word Count : "
+        f"{previous_words}"
+        f" -> "
+        f"{revised_words}"
+    )
+
+    print(
+        f"Research Blocks Used : "
+        f"{len(merged_research)}"
+    )
+
+    print(
+        f"Gaps Addressed : "
+        f"{len(gap_analysis.gaps)}"
+    )
+
+    print(
+        f"Report Versions : "
+        f"{len(state['report_versions'])}"
+    )
+
+    print(
+        "=" * 60
     )
 
     return state
